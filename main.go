@@ -159,6 +159,12 @@ func main() {
 	if err == nil {
 		procSetConsoleTitle.Call(uintptr(unsafe.Pointer(title)))
 	}
+	handle, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
+	if err == nil {
+		windows.GetConsoleMode(handle)
+		windows.SetConsoleMode(handle, 0)
+		windows.CloseHandle(handle)
+	}
 	fmt.Println(totsugeki)
 	fmt.Printf("                                         %s\n", Version)
 
