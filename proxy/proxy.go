@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type StriveAPIProxy struct {
@@ -57,9 +57,60 @@ func (s *StriveAPIProxy) HandleCatchall(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(resp.StatusCode)
 	reader := io.TeeReader(resp.Body, w) // For dumping API payloads
-	_, err = io.ReadAll(reader)
+	payload, err := io.ReadAll(reader)
+	// decode the payload as json
+	fmt.Println(string(payload))
 	if err != nil {
 		fmt.Println(err)
+	}
+}
+
+// print replays to a file
+func (s *StriveAPIProxy) HandleReplays(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.proxyRequest(r)
+	if err != nil {
+		fmt.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+	// Copy headers
+	for name, values := range resp.Header {
+		w.Header()[name] = values
+	}
+	w.WriteHeader(resp.StatusCode)
+	reader := io.TeeReader(resp.Body, w) // For dumping API payloads
+	payload, err := io.ReadAll(reader)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		f, err := os.OpenFile("replays.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+
+		defer f.Close()
+
+		if _, err = f.WriteString(string(payload)); err != nil {
+			panic(err)
+		}
+
+		f2, err := os.OpenFile("replaysRAW.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			fmt.Println("Could not open file")
+			panic(err)
+		}
+
+		defer f2.Close()
+
+		// we use this as a delimeter when processing the raw data as it is very unlikeyly that we will get a full 8 bytes == 242
+		bytesToWrite := append(payload, []byte{242, 242, 242, 242, 242, 242, 242, 242}...)
+		if _, err = f2.Write(bytesToWrite); err != nil {
+			fmt.Println("Could not write bytes")
+			panic(err)
+		}
+		// decode the payload as json
+		fmt.Println(bytesToWrite)
 	}
 }
 
@@ -100,7 +151,9 @@ func (s *StriveAPIProxy) Shutdown() {
 }
 
 func CreateStriveProxy(listen string, GGStriveAPIURL string, PatchedAPIURL string, options *StriveAPIProxyOptions) *StriveAPIProxy {
-
+	// Logger
+	// make a new logger that logs requests and responses to stdout
+	// logger := httplog.NewLogger("TOTSUGEKI", httplog.Options{JSON: false, LogLevel: "trace"})
 	transport := http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		MaxIdleConns:        2,
@@ -122,7 +175,8 @@ func CreateStriveProxy(listen string, GGStriveAPIURL string, PatchedAPIURL strin
 	statsSet := proxy.HandleCatchall
 	statsGet := proxy.HandleCatchall
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	// r.Use(middleware.Logger)
+	// r.Use(httplog.RequestLogger(logger))
 
 	if options.AsyncStatsSet {
 		statsSet = proxy.HandleStatsSet
@@ -150,6 +204,7 @@ func CreateStriveProxy(listen string, GGStriveAPIURL string, PatchedAPIURL strin
 		r.HandleFunc("/sys/get_env", proxy.HandleGetEnv)
 		r.HandleFunc("/statistics/get", statsGet)
 		r.HandleFunc("/statistics/set", statsSet)
+		r.HandleFunc("/catalog/get_replay*", proxy.HandleReplays)
 		r.HandleFunc("/*", proxy.HandleCatchall)
 	})
 
