@@ -89,7 +89,7 @@ func (s *StriveAPIProxy) HandleReplays(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		f, err := os.OpenFile("replays.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		f, err := os.OpenFile("outputs/replaysRAW.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			panic(err)
 		}
@@ -100,7 +100,7 @@ func (s *StriveAPIProxy) HandleReplays(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 
-		f2, err := os.OpenFile("replaysRAW.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		f2, err := os.OpenFile("outputs/replaysRAW.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			fmt.Println("Could not open file")
 			panic(err)
